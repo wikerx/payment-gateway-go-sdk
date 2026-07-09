@@ -1,0 +1,4 @@
+package main
+
+// This file is intentionally named .example so each directory can keep a
+// standalone runnable main.go without package conflicts.

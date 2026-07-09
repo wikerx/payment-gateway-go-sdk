@@ -155,11 +155,39 @@ payload, err := verifier.Verify(rawBody)
 
 `Verify` 会解析回调外壳、校验 `livemode`，并使用商户响应私钥解密 `data`。
 
+## 单独使用报文加解密
+
+如果商户只想验证 OpenAPI 报文体加解密，不想使用完整 Client，可以直接使用两个纯函数：
+
+```go
+compactData, err := paymentgateway.EncryptPayload(
+    `{"orderNo":"PAYIN_1","amount":"12.34","currency":"USD"}`,
+    platformRequestPublicKeyText,
+)
+```
+
+```go
+plainJSON, err := paymentgateway.DecryptPayload(
+    compactData,
+    merchantResponsePrivateKeyText,
+)
+```
+
+函数说明：
+
+| 函数 | 作用 | 密钥格式 |
+|---|---|---|
+| `EncryptPayload(plainJSON, platformPublicKeyText)` | 把明文 JSON 加密成 `protectedHeader.encryptedAesKey.iv.cipherText.tag` | 平台请求公钥 PEM 文本或 X.509 DER Base64 |
+| `DecryptPayload(compactData, merchantResponsePrivateKeyText)` | 把 compact `data` 解密成明文 JSON | 商户响应私钥 PEM 文本或 PKCS#8 DER Base64 |
+
+这两个函数只处理报文体 `data`，不生成 JWT、不读取配置文件、不发送 HTTP 请求，也不解析网关响应外壳 `code/msg/livemode`。
+
 ## 验证
 
 ```bash
 go test ./...
 go test ./... -run TestPayloadCryptoRoundTrip
+go test ./... -run TestStandalonePayloadCrypto
 ```
 
 生产环境建议关闭 `payment.gateway.debug-raw-log-enabled`。

@@ -47,6 +47,15 @@ PAYOUT_CREATE_1783591234567890000_7d8f...
 
 `protectedHeader` 会作为 AES-GCM AAD 参与认证。
 
+Go SDK 提供两个单独的报文体加解密函数，方便商户复制或独立验证协议：
+
+```go
+compactData, err := paymentgateway.EncryptPayload(plainJSON, platformRequestPublicKeyText)
+plainJSON, err := paymentgateway.DecryptPayload(compactData, merchantResponsePrivateKeyText)
+```
+
+这两个函数只处理 compact `data`，不处理 JWT、HTTP Header、`livemode` 外壳或网关业务响应码。
+
 ## 响应解密
 
 网关响应外壳：

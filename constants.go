@@ -1,18 +1,30 @@
 package paymentgateway
 
 const (
+	// ConfigFileName is the default merchant properties file name.
 	ConfigFileName = "merchant-config.properties"
 
-	DefaultVersion       = "v1"
-	JWTTTLSeconds        = 180
+	// DefaultVersion is reserved for versioned API routing.
+	DefaultVersion = "v1"
+	// JWTTTLSeconds is the maximum Authorization JWT lifetime accepted by the SDK.
+	JWTTTLSeconds = 180
+	// HTTPConnectTimeoutMS is the default connect timeout in milliseconds.
 	HTTPConnectTimeoutMS = 3000
-	HTTPReadTimeoutMS    = 10000
+	// HTTPReadTimeoutMS is the default total request timeout in milliseconds.
+	HTTPReadTimeoutMS = 10000
+	// HTTPStatusSuccessMin is the inclusive lower bound for successful HTTP statuses.
 	HTTPStatusSuccessMin = 200
+	// HTTPStatusSuccessMax is the exclusive upper bound for successful HTTP statuses.
 	HTTPStatusSuccessMax = 300
-	ContentType          = "application/json; charset=UTF-8"
-	Accept               = "application/json"
-	ResponseCodeSuccess  = 0
-	AuthorizationPrefix  = "Bearer "
+	// ContentType is used for encrypted JSON request envelopes.
+	ContentType = "application/json; charset=UTF-8"
+	// Accept asks the gateway for JSON response envelopes.
+	Accept = "application/json"
+	// ResponseCodeSuccess is the gateway business success code.
+	ResponseCodeSuccess = 0
+	// AuthorizationPrefix prefixes the bearer JWT in the Authorization header.
+	AuthorizationPrefix = "Bearer "
+	// HeaderAuthorization is the HTTP Authorization header name.
 	HeaderAuthorization  = "Authorization"
 	HeaderContentType    = "Content-Type"
 	HeaderAccept         = "Accept"

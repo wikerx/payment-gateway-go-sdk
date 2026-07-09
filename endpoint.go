@@ -3,11 +3,15 @@ package paymentgateway
 import "fmt"
 
 type Endpoint struct {
-	Name   string
+	// Name is a human-readable API name used in SDK logs.
+	Name string
+	// Method is the HTTP method used by the endpoint.
 	Method string
-	Path   string
+	// Path is the gateway path. Query/path parameters are formatted separately.
+	Path string
 }
 
+// Format injects path arguments into endpoints such as /resource/%s.
 func (e Endpoint) Format(args ...any) string {
 	if len(args) == 0 {
 		return e.Path
@@ -15,6 +19,7 @@ func (e Endpoint) Format(args ...any) string {
 	return fmt.Sprintf(e.Path, args...)
 }
 
+// OpenAPI endpoint metadata used by the client and demo catalog.
 var (
 	EndpointPaymentCreate    = Endpoint{"Payment Create", "POST", PaymentCreatePath}
 	EndpointPaymentRetrieve  = Endpoint{"Payment Retrieve", "GET", PaymentRetrievePath}

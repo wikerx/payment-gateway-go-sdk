@@ -21,6 +21,7 @@ func toPrettyJSON(value any) string {
 	return string(bytes)
 }
 
+// ToPrettyJSON formats a value as indented JSON for examples and demo output.
 func ToPrettyJSON(value any) string {
 	return toPrettyJSON(value)
 }

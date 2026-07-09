@@ -10,19 +10,34 @@ import (
 )
 
 type Config struct {
-	BaseURL                    string
-	MerchantID                 string
-	MerchantJWTSecret          string
-	Livemode                   bool
-	PlatformPublicKey          string
+	// BaseURL is the gateway base address, for example http://localhost:58060.
+	BaseURL string
+	// MerchantID is the merchant number assigned by the platform.
+	MerchantID string
+	// MerchantJWTSecret is the HS256 secret used to sign Authorization JWTs.
+	MerchantJWTSecret string
+	// Livemode separates sandbox traffic from production traffic.
+	Livemode bool
+	// PlatformPublicKey is used to encrypt merchant request bodies.
+	PlatformPublicKey string
+	// MerchantResponsePrivateKey is used to decrypt gateway responses and
+	// webhook bodies addressed to this merchant.
 	MerchantResponsePrivateKey string
-	JWTTTLSeconds              int
-	ConnectTimeout             time.Duration
-	ReadTimeout                time.Duration
-	DefaultVersion             string
-	RawHTTPLogEnabled          bool
+	// JWTTTLSeconds controls JWT expiration and must be between 1 and 180.
+	JWTTTLSeconds int
+	// ConnectTimeout controls the HTTP connection timeout.
+	ConnectTimeout time.Duration
+	// ReadTimeout controls the whole HTTP request timeout used by net/http.
+	ReadTimeout time.Duration
+	// DefaultVersion is reserved for merchants that route by API version.
+	DefaultVersion string
+	// RawHTTPLogEnabled prints encrypted envelopes and masked plaintext payloads
+	// for sandbox troubleshooting. Keep it disabled in production.
+	RawHTTPLogEnabled bool
 }
 
+// Validate normalizes and validates merchant configuration. It also fills SDK
+// defaults for JWT TTL, HTTP timeouts, and API version when they are omitted.
 func (c *Config) Validate() error {
 	c.BaseURL = strings.TrimRight(requireTrim(c.BaseURL), "/")
 	c.MerchantID = requireTrim(c.MerchantID)
@@ -62,6 +77,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// LoadConfig reads merchant-config.properties and resolves inline key text or
+// PEM file paths into the Config fields used by the SDK.
 func LoadConfig(path string) (*Config, error) {
 	if path == "" {
 		path = filepath.Join("config", ConfigFileName)

@@ -19,6 +19,9 @@ type Client struct {
 	merchantResponsePrivateKey *rsa.PrivateKey
 }
 
+// NewClient creates a Payment Gateway OpenAPI client from an already loaded
+// Config. It validates merchant settings, parses RSA keys, and prepares the
+// JWT signer and payload crypto helpers used by subsequent API calls.
 func NewClient(config *Config, options ...ClientOption) (*Client, error) {
 	if config == nil {
 		return nil, configError("config can not be nil", nil)
@@ -48,6 +51,9 @@ func NewClient(config *Config, options ...ClientOption) (*Client, error) {
 	return client, nil
 }
 
+// Create loads merchant-config.properties from configPath and returns a ready
+// OpenAPI client. When configPath is blank, config/merchant-config.properties
+// under the current working directory is used.
 func Create(configPath string, options ...ClientOption) (*Client, error) {
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
@@ -56,8 +62,12 @@ func Create(configPath string, options ...ClientOption) (*Client, error) {
 	return NewClient(cfg, options...)
 }
 
+// ClientOption customizes a Client during construction.
 type ClientOption func(*Client)
 
+// WithHTTPTransport overrides the default net/http transport. Tests and
+// merchants with their own HTTP stack can use this hook without changing
+// encryption, JWT signing, or response parsing behavior.
 func WithHTTPTransport(transport HTTPTransport) ClientOption {
 	return func(client *Client) {
 		if transport != nil {
@@ -66,18 +76,25 @@ func WithHTTPTransport(transport HTTPTransport) ClientOption {
 	}
 }
 
+// Config returns the validated configuration used by the client.
 func (c *Client) Config() *Config {
 	return c.config
 }
 
+// CreateCheckoutPayment creates a hosted checkout payment order. The request is
+// encrypted before being sent to /pay-api/trade/payment.
 func (c *Client) CreateCheckoutPayment(ctx context.Context, request APIRequest) (*Result, error) {
 	return c.createPayment(ctx, request)
 }
 
+// CreateLocalPayment creates a direct/local payment order. The paymentMethod
+// and paymentMethodData fields should match the selected payment method.
 func (c *Client) CreateLocalPayment(ctx context.Context, request APIRequest) (*Result, error) {
 	return c.createPayment(ctx, request)
 }
 
+// CreateCardPayment creates a direct card payment order. If paymentMethod is
+// blank, the SDK fills it with CARD before encrypting the request.
 func (c *Client) CreateCardPayment(ctx context.Context, request APIRequest) (*Result, error) {
 	if request == nil {
 		return nil, validationError("payment request can not be nil")
@@ -88,6 +105,7 @@ func (c *Client) CreateCardPayment(ctx context.Context, request APIRequest) (*Re
 	return c.createPayment(ctx, request)
 }
 
+// RetrievePayment queries a payment order by gateway tradeNo.
 func (c *Client) RetrievePayment(ctx context.Context, tradeNo string) (*Result, error) {
 	value, err := requireText(tradeNo, "tradeNo")
 	if err != nil {
@@ -96,6 +114,8 @@ func (c *Client) RetrievePayment(ctx context.Context, tradeNo string) (*Result, 
 	return c.getSecured(ctx, EndpointPaymentRetrieve, uniqueJWTID("PAYMENT_QUERY_"), url.PathEscape(value))
 }
 
+// CreateRefund creates a refund request for an existing payment. The request is
+// encrypted and should include tradeNo, currency, amount, and refundAmount.
 func (c *Client) CreateRefund(ctx context.Context, request APIRequest) (*Result, error) {
 	if err := validateRefundCreateRequest(request); err != nil {
 		return nil, err
@@ -103,6 +123,7 @@ func (c *Client) CreateRefund(ctx context.Context, request APIRequest) (*Result,
 	return c.postEncrypted(ctx, EndpointRefundCreate, request, uniqueJWTID("REFUND_CREATE_"))
 }
 
+// RetrieveRefund queries a refund request by refundNo.
 func (c *Client) RetrieveRefund(ctx context.Context, refundNo string) (*Result, error) {
 	value, err := requireText(refundNo, "refundNo")
 	if err != nil {
@@ -111,6 +132,8 @@ func (c *Client) RetrieveRefund(ctx context.Context, refundNo string) (*Result, 
 	return c.getSecured(ctx, EndpointRefundRetrieve, uniqueJWTID("REFUND_QUERY_"), url.PathEscape(value))
 }
 
+// CreatePayout creates a payout transfer. The request is encrypted and should
+// include orderNo, currency, amount, paymentMethod, and paymentMethodData.
 func (c *Client) CreatePayout(ctx context.Context, request APIRequest) (*Result, error) {
 	if err := validatePayoutCreateRequest(request); err != nil {
 		return nil, err
@@ -118,6 +141,7 @@ func (c *Client) CreatePayout(ctx context.Context, request APIRequest) (*Result,
 	return c.postEncrypted(ctx, EndpointPayoutCreate, request, uniqueJWTID("PAYOUT_CREATE_"))
 }
 
+// RetrievePayout queries a payout transfer by gateway tradeNo.
 func (c *Client) RetrievePayout(ctx context.Context, tradeNo string) (*Result, error) {
 	value, err := requireText(tradeNo, "tradeNo")
 	if err != nil {
@@ -126,6 +150,8 @@ func (c *Client) RetrievePayout(ctx context.Context, tradeNo string) (*Result, e
 	return c.getSecured(ctx, EndpointPayoutRetrieve, uniqueJWTID("PAYOUT_QUERY_"), url.PathEscape(value))
 }
 
+// CancelPayout cancels a payout transfer when the gateway still allows
+// cancellation for the transfer state.
 func (c *Client) CancelPayout(ctx context.Context, request APIRequest) (*Result, error) {
 	if request == nil {
 		return nil, validationError("request can not be nil")
@@ -133,6 +159,8 @@ func (c *Client) CancelPayout(ctx context.Context, request APIRequest) (*Result,
 	return c.postEncrypted(ctx, EndpointPayoutCancel, request, uniqueJWTID("PAYOUT_CANCEL_"))
 }
 
+// RetrieveBalances queries merchant fund account balances. Passing a non-blank
+// currency adds ?currency=<value>; passing blank queries all available balances.
 func (c *Client) RetrieveBalances(ctx context.Context, currency string) (*Result, error) {
 	path := EndpointBalanceInquiry.Path
 	if strings.TrimSpace(currency) != "" {
@@ -141,6 +169,8 @@ func (c *Client) RetrieveBalances(ctx context.Context, currency string) (*Result
 	return c.execute(ctx, EndpointBalanceInquiry, path, nil, nil, uniqueJWTID("BALANCE_QUERY_"))
 }
 
+// CreateCustomer creates a customer profile that can be referenced by later
+// payment requests through customerId.
 func (c *Client) CreateCustomer(ctx context.Context, request APIRequest) (*Result, error) {
 	if err := validateCustomerRequest(request); err != nil {
 		return nil, err
@@ -148,6 +178,7 @@ func (c *Client) CreateCustomer(ctx context.Context, request APIRequest) (*Resul
 	return c.postEncrypted(ctx, EndpointCustomerCreate, request, uniqueJWTID("CUSTOMER_CREATE_"))
 }
 
+// RetrieveCustomer queries a customer profile by customerId.
 func (c *Client) RetrieveCustomer(ctx context.Context, customerID string) (*Result, error) {
 	value, err := requireText(customerID, "customerId")
 	if err != nil {
@@ -156,6 +187,8 @@ func (c *Client) RetrieveCustomer(ctx context.Context, customerID string) (*Resu
 	return c.getSecured(ctx, EndpointCustomerRetrieve, uniqueJWTID("CUSTOMER_QUERY_"), url.PathEscape(value))
 }
 
+// UpdateCustomer updates a customer profile by customerId. If customerId also
+// exists in request, the path value wins and the body field is removed.
 func (c *Client) UpdateCustomer(ctx context.Context, customerID string, request APIRequest) (*Result, error) {
 	if err := validateCustomerRequest(request); err != nil {
 		return nil, err
@@ -169,6 +202,8 @@ func (c *Client) UpdateCustomer(ctx context.Context, customerID string, request 
 	return c.sendEncrypted(ctx, EndpointCustomerUpdate, path, request, uniqueJWTID("CUSTOMER_UPDATE_"))
 }
 
+// DeleteCustomer deletes or disables a customer profile by customerId,
+// depending on gateway-side customer lifecycle rules.
 func (c *Client) DeleteCustomer(ctx context.Context, customerID string) (*Result, error) {
 	value, err := requireText(customerID, "customerId")
 	if err != nil {
@@ -177,6 +212,7 @@ func (c *Client) DeleteCustomer(ctx context.Context, customerID string) (*Result
 	return c.getSecured(ctx, EndpointCustomerDelete, uniqueJWTID("CUSTOMER_DELETE_"), url.PathEscape(value))
 }
 
+// ListCustomers returns the merchant customer list from the gateway.
 func (c *Client) ListCustomers(ctx context.Context) (*Result, error) {
 	return c.execute(ctx, EndpointCustomerList, EndpointCustomerList.Path, nil, nil, uniqueJWTID("CUSTOMER_LIST_"))
 }
@@ -200,6 +236,8 @@ func (c *Client) sendEncrypted(ctx context.Context, endpoint Endpoint, path stri
 	if err != nil {
 		return nil, validationError("request can not be serialized")
 	}
+	// Business request bodies are never sent as plain JSON. The SDK encrypts
+	// them into compact payload data and wraps them with livemode.
 	encryptedData, err := c.payloadCrypto.Encrypt(requestJSON, c.platformPublicKey)
 	if err != nil {
 		return nil, err
@@ -227,6 +265,8 @@ func (c *Client) execute(ctx context.Context, endpoint Endpoint, path string, pl
 	if err != nil {
 		return nil, err
 	}
+	// Every request carries a fresh JWT jti so the gateway can reject replayed
+	// Authorization tokens independently from business order idempotency.
 	c.logAPICall(endpoint, path, requestID, jwtID, plainRequest, encryptedRequest)
 	response, err := c.transport.Execute(ctx, SDKHTTPRequest{
 		Method:         endpoint.Method,
@@ -266,6 +306,8 @@ func (c *Client) convertResult(encryptedResponse *EncryptedResponse, requestID s
 		RequestID: requestID,
 	}
 	if strings.TrimSpace(encryptedResponse.Data) != "" {
+		// Successful and error envelopes may both contain encrypted data. Always
+		// decrypt data before exposing the final Result to merchant code.
 		plainJSON, err := c.payloadCrypto.Decrypt(encryptedResponse.Data, c.merchantResponsePrivateKey)
 		if err != nil {
 			return nil, err

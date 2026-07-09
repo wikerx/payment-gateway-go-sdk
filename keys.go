@@ -11,6 +11,8 @@ import (
 
 var pemBlockPattern = regexp.MustCompile(`(?s)-----BEGIN (?:PUBLIC|PRIVATE|RSA PRIVATE) KEY-----.+?-----END (?:PUBLIC|PRIVATE|RSA PRIVATE) KEY-----`)
 
+// ReadPublicKey parses the platform request public key used to encrypt request
+// bodies. It accepts PEM text or X.509 DER Base64 text.
 func ReadPublicKey(value string) (*rsa.PublicKey, error) {
 	der, err := normalizePEM(value)
 	if err != nil {
@@ -27,6 +29,9 @@ func ReadPublicKey(value string) (*rsa.PublicKey, error) {
 	return rsaKey, nil
 }
 
+// ReadPrivateKey parses the merchant response private key used to decrypt
+// gateway responses and webhooks. It accepts PKCS#8 PEM/Base64 and PKCS#1 RSA
+// private key PEM formats.
 func ReadPrivateKey(value string) (*rsa.PrivateKey, error) {
 	der, err := normalizePEM(value)
 	if err != nil {
@@ -47,6 +52,9 @@ func ReadPrivateKey(value string) (*rsa.PrivateKey, error) {
 	return pkcs1Key, nil
 }
 
+// normalizePEM converts pasted PEM or DER Base64 key text into raw DER bytes.
+// It tolerates surrounding text and whitespace to make configuration less
+// fragile for merchant integrations.
 func normalizePEM(value string) ([]byte, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {

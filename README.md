@@ -157,6 +157,8 @@ payload, err := verifier.Verify(rawBody)
 
 ## 单独使用报文加解密
 
+### 方式一：导入 SDK 后使用
+
 如果商户只想验证 OpenAPI 报文体加解密，不想使用完整 Client，可以直接使用两个纯函数：
 
 ```go
@@ -182,12 +184,44 @@ plainJSON, err := paymentgateway.DecryptPayload(
 
 这两个函数只处理报文体 `data`，不生成 JWT、不读取配置文件、不发送 HTTP 请求，也不解析网关响应外壳 `code/msg/livemode`。
 
+> 注意：这种方式仍然需要导入 `github.com/wikerx/payment-gateway-go-sdk`，因为函数内部会复用 SDK 的密钥解析和加解密实现。
+
+### 方式二：只复制一个 Go 文件
+
+如果商户不想引入整个 SDK，只需要把下面这个文件复制到自己的项目中：
+
+```text
+examples/standalone/payloadcrypto/payload_crypto.go
+```
+
+这个文件是独立实现，只依赖 Go 标准库，包含：
+
+| 函数 | 作用 |
+|---|---|
+| `EncryptPayload(plainJSON, platformPublicKeyText)` | 明文 JSON 加密为 compact `data` |
+| `DecryptPayload(compactData, merchantResponsePrivateKeyText)` | compact `data` 解密为明文 JSON |
+
+商户复制后可以按自己的项目修改第一行包名：
+
+```go
+package payloadcrypto
+```
+
+例如改成：
+
+```go
+package payment
+```
+
+独立文件同样支持平台请求公钥 PEM 文本或 X.509 DER Base64 文本、商户响应私钥 PEM 文本或 PKCS#8 DER Base64 文本。它只处理报文体加解密，不处理 JWT、HTTP 请求、配置文件、业务 API 调用。
+
 ## 验证
 
 ```bash
 go test ./...
 go test ./... -run TestPayloadCryptoRoundTrip
 go test ./... -run TestStandalonePayloadCrypto
+go test ./examples/standalone/payloadcrypto
 ```
 
 生产环境建议关闭 `payment.gateway.debug-raw-log-enabled`。

@@ -23,10 +23,10 @@ func (m *mockTransport) Execute(ctx context.Context, request SDKHTTPRequest) (*S
 }
 
 func TestClientCreateCustomerUsesEncryptedBody(t *testing.T) {
-	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	cfg := testConfig(t, privateKey)
+	keys := testKeyPairs(t)
+	cfg := testConfig(t, keys)
 	crypto := NewPayloadCrypto()
-	responseData, err := crypto.Encrypt(`{"customerId":"cus_1"}`, &privateKey.PublicKey)
+	responseData, err := crypto.Encrypt(`{"customerId":"cus_1"}`, &keys.merchantResponsePrivateKey.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,14 +54,28 @@ func TestClientCreateCustomerUsesEncryptedBody(t *testing.T) {
 	if !strings.Contains(transport.request.Body, `"livemode":false`) || !strings.Contains(transport.request.Body, `"data"`) {
 		t.Fatalf("encrypted request body not generated: %s", transport.request.Body)
 	}
+	var encryptedRequest EncryptedRequest
+	if err := fromJSON(transport.request.Body, &encryptedRequest); err != nil {
+		t.Fatal(err)
+	}
+	plainRequest, err := crypto.Decrypt(encryptedRequest.Data, keys.platformRequestPrivateKey)
+	if err != nil {
+		t.Fatalf("request body must be decryptable by platform request private key: %v", err)
+	}
+	if !strings.Contains(plainRequest, `"firstname":"Lily"`) {
+		t.Fatalf("unexpected decrypted request body: %s", plainRequest)
+	}
+	if _, err := crypto.Decrypt(encryptedRequest.Data, keys.merchantResponsePrivateKey); err == nil {
+		t.Fatal("request body must not be decryptable by merchant response private key")
+	}
 }
 
 func TestClientLogsEncryptedResponseAndPayloadParts(t *testing.T) {
-	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	cfg := testConfig(t, privateKey)
+	keys := testKeyPairs(t)
+	cfg := testConfig(t, keys)
 	cfg.RawHTTPLogEnabled = true
 	crypto := NewPayloadCrypto()
-	responseData, err := crypto.Encrypt(`{"customerId":"cus_1"}`, &privateKey.PublicKey)
+	responseData, err := crypto.Encrypt(`{"customerId":"cus_1"}`, &keys.merchantResponsePrivateKey.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,13 +106,34 @@ func TestClientLogsEncryptedResponseAndPayloadParts(t *testing.T) {
 	}
 }
 
-func testConfig(t *testing.T, key *rsa.PrivateKey) *Config {
+type testOpenAPIKeys struct {
+	platformRequestPrivateKey  *rsa.PrivateKey
+	merchantResponsePrivateKey *rsa.PrivateKey
+}
+
+func testKeyPairs(t *testing.T) testOpenAPIKeys {
 	t.Helper()
-	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	platformRequestPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	publicDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	merchantResponsePrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return testOpenAPIKeys{
+		platformRequestPrivateKey:  platformRequestPrivateKey,
+		merchantResponsePrivateKey: merchantResponsePrivateKey,
+	}
+}
+
+func testConfig(t *testing.T, keys testOpenAPIKeys) *Config {
+	t.Helper()
+	privateDER, err := x509.MarshalPKCS8PrivateKey(keys.merchantResponsePrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicDER, err := x509.MarshalPKIXPublicKey(&keys.platformRequestPrivateKey.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}

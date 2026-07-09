@@ -14,6 +14,9 @@ var sensitiveFieldNames = map[string]bool{
 	"platformPublicKey": true, "Authorization": true, "authorization": true,
 }
 
+// Sanitize recursively masks sensitive values before debug logging. It keeps
+// field names and structure visible so merchants can still diagnose request
+// shape issues without leaking secrets or full payment credentials.
 func Sanitize(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -47,6 +50,7 @@ func Sanitize(value any) any {
 	}
 }
 
+// SanitizeHeaders masks sensitive HTTP headers such as Authorization.
 func SanitizeHeaders(headers map[string][]string) map[string][]string {
 	result := make(map[string][]string, len(headers))
 	for key, values := range headers {
@@ -61,6 +65,8 @@ func SanitizeHeaders(headers map[string][]string) map[string][]string {
 	return result
 }
 
+// EncryptedDataSummary returns a short preview of encrypted compact data for
+// logs when raw HTTP logging is disabled.
 func EncryptedDataSummary(data string) string {
 	if len(data) <= 24 {
 		return mask(data)

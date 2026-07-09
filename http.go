@@ -9,32 +9,43 @@ import (
 )
 
 type SDKHTTPRequest struct {
-	Method         string
-	URL            string
-	Headers        map[string]string
-	Body           string
+	// Method is the HTTP method, such as GET, POST, PUT, or DELETE.
+	Method string
+	// URL is the absolute request URL.
+	URL string
+	// Headers are sent as-is to the gateway.
+	Headers map[string]string
+	// Body is the JSON request body. It is blank for GET/DELETE calls without a body.
+	Body string
+	// ConnectTimeout is reserved for custom transports that separate connect and read timeouts.
 	ConnectTimeout time.Duration
-	ReadTimeout    time.Duration
+	// ReadTimeout is used by the default transport as the request context timeout.
+	ReadTimeout time.Duration
 }
 
+// SDKHTTPResponse is the raw HTTP response returned by a transport.
 type SDKHTTPResponse struct {
 	StatusCode int
 	Headers    map[string][]string
 	Body       string
 }
 
+// HTTPTransport lets merchants or tests replace the default net/http transport.
 type HTTPTransport interface {
 	Execute(ctx context.Context, request SDKHTTPRequest) (*SDKHTTPResponse, error)
 }
 
+// NetHTTPTransport is the default transport implementation backed by net/http.
 type NetHTTPTransport struct {
 	Client *http.Client
 }
 
+// NewNetHTTPTransport creates a default net/http transport.
 func NewNetHTTPTransport() *NetHTTPTransport {
 	return &NetHTTPTransport{Client: &http.Client{}}
 }
 
+// Execute sends one HTTP request and returns the raw status, headers, and body.
 func (t *NetHTTPTransport) Execute(ctx context.Context, request SDKHTTPRequest) (*SDKHTTPResponse, error) {
 	client := t.Client
 	if client == nil {

@@ -10,10 +10,14 @@ import (
 
 type MerchantJWTSigner struct{}
 
+// NewMerchantJWTSigner returns the HS256 JWT signer used for gateway
+// Authorization headers.
 func NewMerchantJWTSigner() *MerchantJWTSigner {
 	return &MerchantJWTSigner{}
 }
 
+// Sign creates a merchant Authorization JWT. The jwtID becomes the jti claim
+// and must be unique per request so the gateway can enforce replay protection.
 func (s *MerchantJWTSigner) Sign(merchantID, secret string, livemode bool, jwtID string, issuedAt time.Time, ttlSeconds int) (string, error) {
 	if strings.TrimSpace(merchantID) == "" {
 		return "", validationError("merchantId can not be blank")
@@ -27,6 +31,8 @@ func (s *MerchantJWTSigner) Sign(merchantID, secret string, livemode bool, jwtID
 	if ttlSeconds <= 0 || ttlSeconds > JWTTTLSeconds {
 		return "", validationError("jwt ttlSeconds must be between 1 and 180")
 	}
+	// Keep the JWT intentionally small. Business idempotency fields belong in
+	// the encrypted request body, not in authentication claims.
 	header := map[string]string{
 		"alg":         "HS256",
 		JWTHeaderType: JWTType,

@@ -5,13 +5,20 @@ import "fmt"
 type ErrorKind string
 
 const (
-	ErrorKindConfig     ErrorKind = "config"
-	ErrorKindCrypto     ErrorKind = "crypto"
-	ErrorKindHTTP       ErrorKind = "http"
-	ErrorKindResponse   ErrorKind = "response"
+	// ErrorKindConfig indicates invalid or missing SDK configuration.
+	ErrorKindConfig ErrorKind = "config"
+	// ErrorKindCrypto indicates encryption, decryption, or key parsing failure.
+	ErrorKindCrypto ErrorKind = "crypto"
+	// ErrorKindHTTP indicates request construction, transport, or HTTP status failure.
+	ErrorKindHTTP ErrorKind = "http"
+	// ErrorKindResponse indicates the gateway response envelope or payload is invalid.
+	ErrorKindResponse ErrorKind = "response"
+	// ErrorKindValidation indicates merchant input validation failure before sending.
 	ErrorKindValidation ErrorKind = "validation"
 )
 
+// SDKError is the typed error returned by SDK validation, transport, crypto,
+// config, and response parsing paths.
 type SDKError struct {
 	Kind ErrorKind
 	Msg  string

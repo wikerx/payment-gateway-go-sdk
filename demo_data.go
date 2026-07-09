@@ -1,5 +1,8 @@
 package paymentgateway
 
+// PaymentMethodDataExamples returns sandbox-only paymentMethodData examples
+// used by the demo console and sample programs. Merchants should replace these
+// values with their own customer/payment details in real integrations.
 func PaymentMethodDataExamples() map[string]map[string]any {
 	return map[string]map[string]any{
 		PaymentMethodCashApp: {
@@ -29,6 +32,7 @@ func PaymentMethodDataExamples() map[string]map[string]any {
 	}
 }
 
+// CustomerExample returns a sandbox customer object used by sample requests.
 func CustomerExample() map[string]any {
 	return map[string]any{
 		"firstname": "Lily",

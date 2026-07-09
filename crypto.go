@@ -19,24 +19,37 @@ const (
 )
 
 type PayloadParts struct {
+	// ProtectedHeader is Base64URL(JSON) containing typ/alg/enc.
 	ProtectedHeader string `json:"protectedHeader"`
-	Header          string `json:"header"`
+	// Header is the decoded protected header JSON, useful for debug logs.
+	Header string `json:"header"`
+	// EncryptedAESKey is the RSA-OAEP-256 encrypted random AES content key.
 	EncryptedAESKey string `json:"encryptedAesKey"`
-	IV              string `json:"iv"`
-	CipherText      string `json:"cipherText"`
-	Tag             string `json:"tag"`
+	// IV is the AES-GCM nonce.
+	IV string `json:"iv"`
+	// CipherText is the AES-GCM encrypted business JSON without the tag.
+	CipherText string `json:"cipherText"`
+	// Tag is the AES-GCM authentication tag.
+	Tag string `json:"tag"`
 }
 
+// CompactPayload joins payload components into the OpenAPI data format:
+// protectedHeader.encryptedAesKey.iv.cipherText.tag.
 func (p PayloadParts) CompactPayload() string {
 	return strings.Join([]string{p.ProtectedHeader, p.EncryptedAESKey, p.IV, p.CipherText, p.Tag}, ".")
 }
 
+// PayloadCrypto implements the gateway compact payload encryption protocol. It
+// is stateless and safe to reuse across requests.
 type PayloadCrypto struct{}
 
+// NewPayloadCrypto returns a stateless payload crypto helper.
 func NewPayloadCrypto() *PayloadCrypto {
 	return &PayloadCrypto{}
 }
 
+// Encrypt encrypts plainText with a random AES-256-GCM content key and encrypts
+// that content key with recipientPublicKey using RSA-OAEP-SHA256.
 func (c *PayloadCrypto) Encrypt(plainText string, recipientPublicKey *rsa.PublicKey) (string, error) {
 	parts, err := c.EncryptToParts(plainText, recipientPublicKey)
 	if err != nil {
@@ -45,6 +58,8 @@ func (c *PayloadCrypto) Encrypt(plainText string, recipientPublicKey *rsa.Public
 	return parts.CompactPayload(), nil
 }
 
+// EncryptToParts encrypts plainText and returns the individual compact payload
+// segments. It is mainly useful for debug logging and protocol tests.
 func (c *PayloadCrypto) EncryptToParts(plainText string, recipientPublicKey *rsa.PublicKey) (*PayloadParts, error) {
 	if plainText == "" {
 		return nil, cryptoError("plainText can not be blank", nil)
@@ -64,6 +79,8 @@ func (c *PayloadCrypto) EncryptToParts(plainText string, recipientPublicKey *rsa
 	if err != nil {
 		return nil, err
 	}
+	// The protected header is used as AAD so typ/alg/enc are integrity-protected
+	// even though the header itself is not encrypted.
 	cipherWithTag, err := aesGCMSeal(contentKey, iv, []byte(protectedHeader), []byte(plainText))
 	if err != nil {
 		return nil, err
@@ -84,6 +101,8 @@ func (c *PayloadCrypto) EncryptToParts(plainText string, recipientPublicKey *rsa
 	}, nil
 }
 
+// Decrypt decrypts the compact payload data value returned by the gateway.
+// privateKey must be the merchant response private key.
 func (c *PayloadCrypto) Decrypt(compactPayload string, privateKey *rsa.PrivateKey) (string, error) {
 	if strings.TrimSpace(compactPayload) == "" {
 		return "", cryptoError("OpenAPI encrypted data can not be blank", nil)
@@ -122,6 +141,8 @@ func (c *PayloadCrypto) Decrypt(compactPayload string, privateKey *rsa.PrivateKe
 	return string(plain), nil
 }
 
+// SplitCompactPayload parses compact payload data into its five protocol
+// segments and validates the protected header.
 func (c *PayloadCrypto) SplitCompactPayload(compactPayload string) (*PayloadParts, error) {
 	if strings.TrimSpace(compactPayload) == "" {
 		return nil, cryptoError("OpenAPI encrypted data can not be blank", nil)

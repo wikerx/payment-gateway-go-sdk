@@ -119,7 +119,7 @@ result, err := client.CreateLocalPayment(context.Background(), paymentgateway.AP
 | 退款申请 | 创建退款、查询退款 |
 | 代付 | 发起代付、查询代付、取消代付 |
 | 余额查询 | 查询资金账户余额，可按币种过滤 |
-| Webhook | 代收/代付回调密文解密与 livemode 校验 |
+| Webhook | 代收/代付 GET 回调签名验签、参数解析；兼容密文 body 解密 |
 
 ## 运行示例
 
@@ -158,6 +158,94 @@ http://127.0.0.1:58085/demo/apis
 发起代付页面已包含 `notifyUrl`、`clientIp`、`website`、`metadata` 等网关校验字段，默认 `clientIp=47.125.221.223`。
 
 ## Webhook
+
+### 代收/代付 GET 回调验签
+
+网关回调会把签名时间戳和签名放在请求头：
+
+| Header | 说明 |
+|---|---|
+| `t` | 毫秒时间戳 |
+| `signature` | SHA256 hex 签名 |
+
+代收签名串：
+
+```text
+t + tradeNo + orderNo + currency + amount + status + code + message
+```
+
+代付签名串：
+
+```text
+t + tradeNo + currency + amount + status + code + message
+```
+
+商户不用自己拼签名，直接用 SDK：
+
+```go
+config, _ := paymentgateway.LoadConfig("config/merchant-config.properties")
+verifier, _ := paymentgateway.NewWebhookVerifier(config)
+
+http.HandleFunc("/webhook/payin", func(w http.ResponseWriter, r *http.Request) {
+    payload, err := verifier.VerifyPayinCallbackRequest(r)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    fmt.Println(paymentgateway.ToPrettyJSON(payload))
+    _, _ = w.Write([]byte("success"))
+})
+```
+
+```go
+http.HandleFunc("/webhook/payout", func(w http.ResponseWriter, r *http.Request) {
+    payload, err := verifier.VerifyPayoutCallbackRequest(r)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    fmt.Println(paymentgateway.ToPrettyJSON(payload))
+    _, _ = w.Write([]byte("success"))
+})
+```
+
+SDK 默认校验回调时间戳 5 分钟窗口，防止旧回调被重放。验签通过后，商户还必须按 `tradeNo` 或 `orderNo` 做业务幂等，避免重复回调导致重复更新订单。
+
+完整示例：
+
+```bash
+go run ./examples/webhook/payin
+go run ./examples/webhook/payout
+```
+
+如果默认端口被占用，可以换端口启动：
+
+```bash
+WEBHOOK_PORT=58086 go run ./examples/webhook/payout
+```
+
+本地回调验证时，`notifyUrl` 必须是网关能访问到的公网地址，不能直接写 `127.0.0.1`。例如用 ngrok 暴露本地端口：
+
+```bash
+ngrok http 58086
+```
+
+如果 ngrok 给出的公网地址是 `https://abc123.ngrok-free.app`，发起代付时这样传：
+
+```bash
+PAYOUT_NOTIFY_URL=https://abc123.ngrok-free.app/webhook/payout go run ./examples/api/payout/PayoutTradeTransfer
+```
+
+代收同理：
+
+```bash
+WEBHOOK_PORT=58083 go run ./examples/webhook/payin
+PAYIN_NOTIFY_URL=https://abc123.ngrok-free.app/webhook/payin go run ./examples/api/payin/PayinDirectPayment
+```
+
+### 兼容密文 Body 回调
+
+如果网关环境使用 `livemode + data` 密文 body 回调，可以继续使用：
 
 ```go
 config, _ := paymentgateway.LoadConfig("config/merchant-config.properties")

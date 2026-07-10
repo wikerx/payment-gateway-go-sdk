@@ -50,6 +50,11 @@ func buildPayoutCreateRequest(t *testing.T, merchantConfig standaloneMerchantCon
 	if err != nil {
 		t.Fatal(err)
 	}
+	notifyURL := strings.TrimSpace(os.Getenv("PAYOUT_NOTIFY_URL"))
+	if notifyURL == "" {
+		notifyURL = "http://192.168.2.114:58084/webhook/payout"
+	}
+	t.Logf("代付回调地址 notifyUrl: %s", notifyURL)
 	return map[string]any{
 		"merchantNo":    merchantConfig.MerchantNo,
 		"orderNo":       orderNo,
@@ -57,7 +62,7 @@ func buildPayoutCreateRequest(t *testing.T, merchantConfig standaloneMerchantCon
 		"currency":      "USD",
 		"paymentMethod": "CARD",
 		"clientIp":      "47.125.221.223",
-		"notifyUrl":     "https://merchant.example.com/webhook/payout",
+		"notifyUrl":     notifyURL,
 		"website":       "https://merchant.example.com",
 		"customer": map[string]any{
 			"firstname": "Lily",

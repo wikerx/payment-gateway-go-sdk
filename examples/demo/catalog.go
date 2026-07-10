@@ -104,7 +104,7 @@ func apiCatalog() map[string]DemoAPI {
 			text("amount", "金额", "出款金额。", true, "3.11"),
 			selectField("paymentMethod", "支付方式", "收款支付方式。", true, "CARD", methods),
 			jsonField("paymentMethodData", "支付方式参数", "随 paymentMethod 自动替换。", true, "PAYMENT_METHOD_DATA_CARD"),
-			text("notifyUrl", "异步通知地址", "网关代付结果通知地址。", false, "http://127.0.0.1:58083/webhook/payout"),
+			text("notifyUrl", "异步通知地址", "网关代付结果通知地址。", false, "http://127.0.0.1:58084/webhook/payout"),
 			text("clientIp", "客户端 IP", "操作或客户 IP。", true, "47.125.221.223"),
 			text("website", "商户网站", "商户站点。", false, "https://manage.forgottenthrone.com/"),
 			text("metadata", "透传字段", "商户自定义透传数据。", false, "metadata"),

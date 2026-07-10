@@ -149,6 +149,16 @@ PAYMENT_GATEWAY_CONFIG=/absolute/path/merchant-config.properties go test ./examp
 
 请只在沙盒商户和确认参数无误时运行该测试。这个测试不是 mock，不会自己造响应数据；它会真实请求网关并创建测试交易。
 
+如需同时验证代付回调验签，先启动代付回调服务并把公网回调地址传给测试：
+
+```bash
+WEBHOOK_PORT=58086 go run ./examples/webhook/payout
+ngrok http 58086
+PAYOUT_NOTIFY_URL=https://abc123.ngrok-free.app/webhook/payout go test ./examples/standalone/payloadcrypto -run TestMerchantPayoutCreateFullFlow -v
+```
+
+回调服务会打印收到的 Header、Query、Body、签名原文、网关签名、SDK 计算签名和验签结果。
+
 ## 密钥格式
 
 | 参数 | 支持格式 |

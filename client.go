@@ -267,7 +267,7 @@ func (c *Client) execute(ctx context.Context, endpoint Endpoint, path string, pl
 	}
 	// Every request carries a fresh JWT jti so the gateway can reject replayed
 	// Authorization tokens independently from business order idempotency.
-	c.logAPICall(endpoint, path, requestID, jwtID, plainRequest, encryptedRequest)
+	c.logAPICall(endpoint, requestURL, path, requestID, jwtID, plainRequest, encryptedRequest)
 	response, err := c.transport.Execute(ctx, SDKHTTPRequest{
 		Method:         endpoint.Method,
 		URL:            requestURL,
@@ -341,10 +341,11 @@ func (c *Client) headers(jwtID, requestID string, withBody bool) (map[string]str
 	return headers, nil
 }
 
-func (c *Client) logAPICall(endpoint Endpoint, path, requestID, jwtID string, plainRequest APIRequest, encryptedRequest *EncryptedRequest) {
+func (c *Client) logAPICall(endpoint Endpoint, requestURL, path, requestID, jwtID string, plainRequest APIRequest, encryptedRequest *EncryptedRequest) {
 	log.Printf("API调用开始: %s", toPrettyJSON(map[string]any{
 		"apiName":    endpoint.Name,
 		"method":     endpoint.Method,
+		"url":        requestURL,
 		"path":       path,
 		"merchantId": c.config.MerchantID,
 		"requestId":  requestID,

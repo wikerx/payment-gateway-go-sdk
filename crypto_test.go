@@ -14,7 +14,8 @@ func TestPayloadCryptoRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	crypto := NewPayloadCrypto()
-	compact, err := crypto.Encrypt(`{"orderNo":"ORD_1"}`, &privateKey.PublicKey)
+	plainJSON := `{"message":"payload crypto round trip"}`
+	compact, err := crypto.Encrypt(plainJSON, &privateKey.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +23,7 @@ func TestPayloadCryptoRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plain != `{"orderNo":"ORD_1"}` {
+	if plain != plainJSON {
 		t.Fatalf("unexpected plain text: %s", plain)
 	}
 	parts, err := crypto.SplitCompactPayload(compact)

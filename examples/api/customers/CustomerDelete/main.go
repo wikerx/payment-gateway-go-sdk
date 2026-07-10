@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	sdk "github.com/wikerx/payment-gateway-go-sdk"
 )
@@ -12,7 +13,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	customerID := "cus_xxx"
+	customerID := os.Getenv("CUSTOMER_ID")
+	if customerID == "" {
+		panic("set CUSTOMER_ID to a real customerId returned by customer create")
+	}
 	result, err := client.DeleteCustomer(context.Background(), customerID)
 	if err != nil {
 		panic(err)

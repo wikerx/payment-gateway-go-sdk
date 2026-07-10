@@ -44,6 +44,8 @@ config/merchant-config.properties
 | `payment.gateway.platform-request-public-key` | 二选一 | 平台请求公钥文本 |
 | `payment.gateway.merchant-response-private-key` | 二选一 | 商户响应私钥文本 |
 | `payment.gateway.debug-raw-log-enabled` | 否 | 是否输出沙盒调试日志 |
+| `payment.gateway.connect-timeout-ms` | 否 | HTTP 连接超时，默认 `3000` |
+| `payment.gateway.read-timeout-ms` | 否 | HTTP 请求读取超时，默认 `10000`，示例配置使用 `30000` |
 
 ### 文本密钥模式
 
@@ -106,6 +108,8 @@ result, err := client.CreateLocalPayment(context.Background(), paymentgateway.AP
 })
 ```
 
+`GenerateOrderNo` 会为创建类请求生成新的商户订单号。创建代收、代付等会落库的请求不要复用固定示例单号，否则网关会按重复订单拒绝。
+
 ## 已覆盖 API
 
 | 分组 | API |
@@ -127,7 +131,15 @@ go run ./examples/api/payout/PayoutTradeTransfer
 go run ./examples/api/customers/CustomerCreate
 ```
 
-查询、退款、取消示例中的 `pay_xxx`、`charge_xxx`、`payout_xxx`、`cus_xxx` 需要替换为真实测试接口返回值。
+查询、退款、取消示例不会使用占位值自动请求。运行前需要通过环境变量传入真实接口返回值：
+
+```bash
+CUSTOMER_ID=cus_xxx go run ./examples/api/customers/CustomerRetrieve
+PAYMENT_TRADE_NO=pay_xxx go run ./examples/api/payin/PayinTradePaymentInquiry
+PAYOUT_TRADE_NO=payout_xxx go run ./examples/api/payout/PayoutTradeTransferInquiry
+```
+
+退款、取消必须使用当前网关允许处理的真实交易，否则网关会按业务状态返回失败。
 
 ## 页面联调控制台
 
@@ -163,7 +175,7 @@ payload, err := verifier.Verify(rawBody)
 
 ```go
 compactData, err := paymentgateway.EncryptPayload(
-    `{"orderNo":"PAYIN_1","amount":"12.34","currency":"USD"}`,
+    `{"message":"payload crypto only","amount":"12.34","currency":"USD"}`,
     platformRequestPublicKeyText,
 )
 ```
@@ -200,6 +212,8 @@ examples/standalone/payloadcrypto/payload_crypto.go
 |---|---|
 | `EncryptPayload(plainJSON, platformPublicKeyText)` | 明文 JSON 加密为 compact `data` |
 | `DecryptPayload(compactData, merchantResponsePrivateKeyText)` | compact `data` 解密为明文 JSON |
+| `BuildOpenAPIHeaders(merchantID, merchantJWTSecret, livemode, withBody)` | 生成 `Authorization`、`X-Request-Id` 等 OpenAPI 请求 Header，每次调用都会生成新的 JWT `jti` |
+| `GenerateOrderNo(prefix)` | 生成新的商户订单号，创建代收/代付时每次请求都应重新生成 |
 
 商户复制后可以按自己的项目修改第一行包名：
 
@@ -213,15 +227,22 @@ package payloadcrypto
 package payment
 ```
 
-独立文件同样支持平台请求公钥 PEM 文本或 X.509 DER Base64 文本、商户响应私钥 PEM 文本或 PKCS#8 DER Base64 文本。它只处理报文体加解密，不处理 JWT、HTTP 请求、配置文件、业务 API 调用。
+独立文件同样支持平台请求公钥 PEM 文本或 X.509 DER Base64 文本、商户响应私钥 PEM 文本或 PKCS#8 DER Base64 文本。它负责报文体加解密、JWT 签名、Header 封装和订单号生成；配置文件读取和 HTTP 请求仍由商户自己的项目代码完成。
 
 ## 验证
 
+纯单元测试不会请求网关：
+
 ```bash
-go test ./...
-go test ./... -run TestPayloadCryptoRoundTrip
-go test ./... -run TestStandalonePayloadCrypto
-go test ./examples/standalone/payloadcrypto
+go test ./... -run 'TestPayloadCrypto|TestReadRSAKeys|TestMerchantJWTSigner|TestBuildOpenAPIHeaders|TestSignMerchantJWT|TestSanitize'
 ```
+
+真实网关代付完整流程测试会读取 `config/merchant-config.properties`，请求其中的 `payment.gateway.base-url`，并创建一笔沙盒代付交易：
+
+```bash
+go test ./examples/standalone/payloadcrypto -run TestMerchantPayoutCreateFullFlow -v
+```
+
+运行真实网关测试前请确认网关已启动、配置文件指向正确环境，并且接受创建测试交易。
 
 生产环境建议关闭 `payment.gateway.debug-raw-log-enabled`。

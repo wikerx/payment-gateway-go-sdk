@@ -96,6 +96,14 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	connectTimeout, err := parseOptionalDurationMS(props, "payment.gateway.connect-timeout-ms", HTTPConnectTimeoutMS)
+	if err != nil {
+		return nil, err
+	}
+	readTimeout, err := parseOptionalDurationMS(props, "payment.gateway.read-timeout-ms", HTTPReadTimeoutMS)
+	if err != nil {
+		return nil, err
+	}
 	platformKey, err := resolveKey(baseDir, props["payment.gateway.platform-request-public-key-path"], props["payment.gateway.platform-request-public-key"], "payment.gateway.platform-request-public-key")
 	if err != nil {
 		return nil, err
@@ -112,8 +120,8 @@ func LoadConfig(path string) (*Config, error) {
 		PlatformPublicKey:          platformKey,
 		MerchantResponsePrivateKey: responseKey,
 		JWTTTLSeconds:              JWTTTLSeconds,
-		ConnectTimeout:             HTTPConnectTimeoutMS * time.Millisecond,
-		ReadTimeout:                HTTPReadTimeoutMS * time.Millisecond,
+		ConnectTimeout:             connectTimeout,
+		ReadTimeout:                readTimeout,
 		DefaultVersion:             DefaultVersion,
 		RawHTTPLogEnabled:          rawLog,
 	}
@@ -172,6 +180,21 @@ func parseBool(value, key string) (bool, error) {
 		return false, configError("merchant config "+key+" must be true or false", err)
 	}
 	return parsed, nil
+}
+
+// parseOptionalDurationMS reads timeout settings expressed in milliseconds.
+// Blank values use the SDK default. Non-positive values are rejected because
+// they make real gateway calls fail immediately or wait forever.
+func parseOptionalDurationMS(props map[string]string, key string, fallbackMS int) (time.Duration, error) {
+	value := requireTrim(props[key])
+	if value == "" {
+		return time.Duration(fallbackMS) * time.Millisecond, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return 0, configError("merchant config "+key+" must be a positive millisecond value", err)
+	}
+	return time.Duration(parsed) * time.Millisecond, nil
 }
 
 func resolveKey(baseDir, keyPath, inlineKey, name string) (string, error) {

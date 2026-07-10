@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	sdk "github.com/wikerx/payment-gateway-go-sdk"
 )
@@ -12,7 +13,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	result, err := client.RetrieveRefund(context.Background(), "charge_xxx")
+	refundNo := os.Getenv("REFUND_NO")
+	if refundNo == "" {
+		panic("set REFUND_NO to a real refundNo returned by refund create")
+	}
+	result, err := client.RetrieveRefund(context.Background(), refundNo)
 	if err != nil {
 		panic(err)
 	}

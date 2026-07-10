@@ -3,16 +3,20 @@ package payloadcrypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
@@ -40,6 +44,23 @@ const (
 	// Compact payload format:
 	// protectedHeader.encryptedAesKey.iv.cipherText.tag
 	compactParts = 5
+
+	// jwtTTLSeconds is the default and maximum merchant JWT lifetime accepted
+	// by the gateway. Keep JWTs short-lived because they authorize API access.
+	jwtTTLSeconds = 180
+
+	// HTTP headers used by Payment Gateway OpenAPI.
+	headerAuthorization = "Authorization"
+	headerContentType   = "Content-Type"
+	headerAccept        = "Accept"
+	headerUserAgent     = "User-Agent"
+	headerRequestID     = "X-Request-Id"
+
+	authorizationPrefix = "Bearer "
+	contentType         = "application/json; charset=UTF-8"
+	acceptJSON          = "application/json"
+	userAgent           = "payment-gateway-standalone-go/0.1.0 go"
+	jwtType             = "JWT"
 )
 
 // pemBlockPattern extracts the first public/private key block when merchants
@@ -186,6 +207,106 @@ func DecryptPayload(compactData string, merchantResponsePrivateKeyText string) (
 	return string(plain), nil
 }
 
+// BuildOpenAPIHeaders builds the HTTP headers required for merchant OpenAPI
+// requests.
+//
+// merchantID is the merchant number. merchantJWTSecret is the API private key
+// used for HS256 JWT signing. livemode must match the encrypted request body
+// envelope and the merchant environment. withBody should be true for POST/PUT
+// requests that send JSON, so Content-Type is included.
+//
+// The function generates a fresh JWT jti and X-Request-Id on every call. Do not
+// reuse headers across requests; the gateway may reject replayed JWT jti values.
+func BuildOpenAPIHeaders(merchantID string, merchantJWTSecret string, livemode bool, withBody bool) (map[string]string, error) {
+	jwtID, err := generateID("JWT_")
+	if err != nil {
+		return nil, err
+	}
+	requestID, err := generateID("REQ_")
+	if err != nil {
+		return nil, err
+	}
+	token, err := SignMerchantJWT(merchantID, merchantJWTSecret, livemode, jwtID, time.Now().UTC(), jwtTTLSeconds)
+	if err != nil {
+		return nil, err
+	}
+	headers := map[string]string{
+		headerAuthorization: authorizationPrefix + token,
+		headerAccept:        acceptJSON,
+		headerUserAgent:     userAgent,
+		headerRequestID:     requestID,
+	}
+	if withBody {
+		headers[headerContentType] = contentType
+	}
+	return headers, nil
+}
+
+// GenerateOrderNo creates a unique merchant order number for demo and sandbox
+// requests. The prefix should identify the business type, such as PAYOUT_ or
+// PAYIN_DIRECT_.
+//
+// The value contains a UTC nanosecond timestamp and 16 bytes of crypto/rand
+// randomness. Reusing orderNo can be rejected by the gateway, so generate a new
+// order number for every create-payment/create-payout request.
+func GenerateOrderNo(prefix string) (string, error) {
+	return generateID(prefix)
+}
+
+// SignMerchantJWT creates the Authorization JWT used by OpenAPI requests.
+//
+// The jwtID parameter becomes the jti claim and must be unique for each request
+// to satisfy gateway replay protection. issuedAt should normally be
+// time.Now().UTC(). ttlSeconds must be between 1 and 180.
+//
+// This function only signs JWT; it does not encrypt the request body and does
+// not read merchant-config.properties.
+func SignMerchantJWT(merchantID string, merchantJWTSecret string, livemode bool, jwtID string, issuedAt time.Time, ttlSeconds int) (string, error) {
+	merchantID = strings.TrimSpace(merchantID)
+	if merchantID == "" {
+		return "", errors.New("merchantID can not be blank")
+	}
+	if len([]byte(merchantJWTSecret)) < 32 {
+		return "", errors.New("merchantJWTSecret must be at least 256 bits for HS256")
+	}
+	jwtID = strings.TrimSpace(jwtID)
+	if jwtID == "" {
+		return "", errors.New("jwtID can not be blank")
+	}
+	if ttlSeconds <= 0 || ttlSeconds > jwtTTLSeconds {
+		return "", errors.New("ttlSeconds must be between 1 and 180")
+	}
+
+	// Business idempotency fields, such as orderNo, belong in the encrypted
+	// request body. The JWT only carries authentication and replay-protection
+	// claims.
+	header := map[string]string{
+		"alg": "HS256",
+		"typ": jwtType,
+	}
+	claims := map[string]any{
+		"aud":        []string{"gateway"},
+		"iss":        "merchant",
+		"jti":        jwtID,
+		"iat":        issuedAt.Unix(),
+		"exp":        issuedAt.Add(time.Duration(ttlSeconds) * time.Second).Unix(),
+		"merchantId": merchantID,
+		"livemode":   livemode,
+	}
+	headerJSON, err := json.Marshal(header)
+	if err != nil {
+		return "", err
+	}
+	claimsJSON, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	signingInput := base64.RawURLEncoding.EncodeToString(headerJSON) + "." + base64.RawURLEncoding.EncodeToString(claimsJSON)
+	mac := hmac.New(sha256.New, []byte(merchantJWTSecret))
+	_, _ = mac.Write([]byte(signingInput))
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
 // protectedHeader builds the Base64URL protected header segment.
 //
 // The same encoded string is used as AES-GCM AAD, so the alg/enc/typ metadata
@@ -255,6 +376,15 @@ func randomBytes(length int) ([]byte, error) {
 	value := make([]byte, length)
 	_, err := rand.Read(value)
 	return value, err
+}
+
+// generateID creates unique values for JWT jti and X-Request-Id.
+func generateID(prefix string) (string, error) {
+	random, err := randomBytes(16)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s%d_%s", prefix, time.Now().UTC().UnixNano(), hex.EncodeToString(random)), nil
 }
 
 // readPublicKey accepts either:

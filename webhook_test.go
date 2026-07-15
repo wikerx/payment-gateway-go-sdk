@@ -61,6 +61,41 @@ func TestVerifyPayoutCallback(t *testing.T) {
 	}
 }
 
+func TestVerifyPayoutCallbackKeepsGatewayAmountScale(t *testing.T) {
+	verifier := &WebhookVerifier{tolerance: DefaultWebhookTolerance}
+	now := time.UnixMilli(1784111725000)
+	values := map[string]string{
+		"tradeNo":  "payout_202607151832120212391",
+		"currency": "USD",
+		"amount":   "19.00",
+		"status":   "3",
+		"code":     "fail",
+		"message":  "Fail",
+	}
+	query := url.Values{
+		"merNo":          []string{"2607039255"},
+		"orderNo":        []string{"dfu202607151832009826"},
+		"paymentMethod":  []string{"PAY_PAL"},
+		"completionDate": []string{"2026-07-15T10:35:25"},
+		"metadata":       []string{"myParam=1"},
+	}
+	for key, value := range values {
+		query.Set(key, value)
+	}
+	headers := signedHeaders("1784111725000", PayoutCallbackSignature("1784111725000", values))
+
+	payload, err := verifier.VerifyPayoutCallback(headers, query, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload["amount"] != "19.00" {
+		t.Fatalf("amount scale was not preserved: %#v", payload)
+	}
+	if PayoutCallbackSignature("1784111725000", values) != "8a5d2771f3b2cedf1333c71b8c2965decb3975aceb3caf258ed831c88c5c5bec" {
+		t.Fatalf("unexpected signature for scaled amount")
+	}
+}
+
 func TestVerifyCallbackRejectsInvalidSignature(t *testing.T) {
 	verifier := &WebhookVerifier{tolerance: DefaultWebhookTolerance}
 	query := url.Values{

@@ -180,6 +180,8 @@ t + tradeNo + orderNo + currency + amount + status + code + message
 t + tradeNo + currency + amount + status + code + message
 ```
 
+`amount` 必须使用网关回调 URL 中的原始字符串参与验签。比如网关传 `amount=19.00`，签名原文就必须使用 `19.00`，不能转成 `19`。Go SDK 的回调验签会直接读取 query 参数字符串并保留金额小数位。
+
 商户不用自己拼签名，直接用 SDK：
 
 ```go
